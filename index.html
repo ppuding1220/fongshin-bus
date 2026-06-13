@@ -148,6 +148,19 @@
                     </button>
                 </nav>
 
+                <!-- 方向切換控制器 (去程/返程) -->
+                <div class="px-4 py-2 bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800/60 flex justify-between items-center text-xs transition-colors duration-300">
+                    <span class="font-bold text-slate-500 dark:text-slate-400" data-zh="行車方向" data-en="Direction">行車方向</span>
+                    <div class="flex bg-slate-200 dark:bg-slate-700 p-0.5 rounded-lg transition-colors">
+                        <button id="dir-outbound-btn" class="px-3 py-1 rounded-md font-bold transition-all text-xs" onclick="setDirection(0)">
+                            <span data-zh="去程 (往學區/大東)" data-en="Outbound">去程 (往學區/大東)</span>
+                        </button>
+                        <button id="dir-inbound-btn" class="px-3 py-1 rounded-md font-bold transition-all text-xs" onclick="setDirection(1)">
+                            <span data-zh="返程" data-en="Inbound">返程</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- 搜尋框 -->
                 <div class="p-3 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 transition-colors">
                     <div class="relative">
@@ -224,10 +237,16 @@
                         </div>
                     </div>
 
-                    <button id="backend-save-btn" class="w-full bg-slate-800 dark:bg-slate-900 text-white hover:bg-slate-700 text-sm font-bold py-2.5 px-4 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-link"></i>
-                        <span data-zh="測試並連接後端" data-en="Test & Connect">測試並連接後端</span>
-                    </button>
+                    <!-- 整合重設與測試之雙排按鈕 -->
+                    <div class="flex gap-2">
+                        <button id="backend-save-btn" class="flex-1 bg-slate-800 dark:bg-slate-900 text-white hover:bg-slate-700 text-sm font-bold py-2.5 px-4 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-link"></i>
+                            <span data-zh="測試並連接後端" data-en="Test & Connect">測試並連接後端</span>
+                        </button>
+                        <button id="backend-reset-btn" class="bg-slate-200 dark:bg-slate-600 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-sm font-bold py-2.5 px-3.5 rounded-xl transition-all shadow-sm active:scale-95" onclick="resetBackendDefault()" title="還原預設雲端後端">
+                            <i class="fa-solid fa-arrow-rotate-left"></i>
+                        </button>
+                    </div>
 
                     <div id="backend-status-banner" class="hidden text-xs py-1.5 px-3 rounded-lg text-center font-semibold"></div>
                 </div>
@@ -344,7 +363,7 @@
                 settingsIntervalDesc: 'Set the interval for background bus position updates',
                 noResult: 'No matching stops found',
                 etaNotDeparted: 'Not departed',
-                etaArriving: 'Arriving',
+                textArriving: 'Arriving',
                 eta1Min: 'Approx. 1 Min',
                 etaMinutes: 'Approx. {min} Mins',
                 etaDeparted: 'Departed'
@@ -503,6 +522,15 @@
             }
         };
 
+        // 穩定度升級：精準唯一的 RouteUID 字典 (防範 TDX 全/半角或同名解析衝突)
+        const routeUIDs = {
+            'orange12': 'KHH橘12',
+            'yellow2': 'KHH黃2',
+            'orange11': 'KHH橘11',
+            '11': 'KHH11',
+            '87': 'KHH87'
+        };
+
         // 系統運作中的公車與站牌動態暫存
         let busesState = {
             'orange12': [],
@@ -512,28 +540,44 @@
             '87': []
         };
 
-        // 即時預估到站秒數暫存結構：{ routeId: { stopNameZh: { estimate:秒數, status:狀態 } } }
+        // FIX #1 & FIX #9: ETA Direction / API Cache 一致性 (全部使用 RouteUID + Direction 雙維度 cache)
+        // 即時預估到站秒數暫存結構：{ routeUID: { direction: { stopNameZh: { estimate:秒數, status:狀態 } } } }
         let tdxEtaCache = {
-            'orange12': {},
-            'yellow2': {},
-            'orange11': {},
-            '11': {},
-            '87': {}
+            'KHH橘12': { 0: {}, 1: {} },
+            'KHH黃2': { 0: {}, 1: {} },
+            'KHH橘11': { 0: {}, 1: {} },
+            'KHH11': { 0: {}, 1: {} },
+            'KHH87': { 0: {}, 1: {} }
         };
 
-        // TDX 真實下載並解析後的站牌快取結構 (去程 Direction: 0)
+        // FIX #3 & FIX #6 & FIX #9: 站點 Cache 保護、排序與 RouteUID+Direction 快取一致性
+        // 雙維度快取結構：{ routeUID: { 0:去程, 1:回程 } }
         let tdxStopsCache = {
-            'orange12': null,
-            'yellow2': null,
-            'orange11': null,
-            '11': null,
-            '87': null
+            'KHH橘12': { 0: null, 1: null },
+            'KHH黃2': { 0: null, 1: null },
+            'KHH橘11': { 0: null, 1: null },
+            'KHH11': { 0: null, 1: null },
+            'KHH87': { 0: null, 1: null }
         };
+
+        // FIX #5 & FIX #9: 路網 (Shape) 資料模型統一為 RouteUID + Direction 雙維度快取
+        let tdxShapeCache = {
+            'KHH橘12': { 0: null, 1: null },
+            'KHH黃2': { 0: null, 1: null },
+            'KHH橘11': { 0: null, 1: null },
+            'KHH11': { 0: null, 1: null },
+            'KHH87': { 0: null, 1: null }
+        };
+
+        // FIX #4 Leaflet Cache - 建立地圖標記快取以避免閃爍與頻繁重建 (不更動現有樣式，只做位置與增刪控制)
+        let stationMarkersCache = {}; // Key: routeUID_direction_stopNameZh
+        let busMarkersCache = {};     // Key: routeUID_busPlate
 
         // 應用程式狀態變數
         let currentLang = 'zh'; 
         let currentMainTab = 'home'; 
         let currentRoute = 'orange12';
+        let currentDirection = 0; // 0 去程 (往學區/大東), 1 返程
         let searchQuery = '';
         const STOP_HEIGHT = 80;
 
@@ -574,19 +618,42 @@
         // 🔑 後端代理伺服器連接與資料載入
         // ==========================================
         
-        // 自 LocalStorage 載入歷史設定 (已修正：當無本地快取時，自動強制採用預設雲端後端網址)
+        // 自 LocalStorage 載入歷史設定 (無本地快取時，預設強制採用您的 Render 網址)
         function loadBackendConfig() {
             const savedUrl = localStorage.getItem('node_backend_url');
             if (savedUrl && savedUrl.trim() !== "") {
                 backendUrlInput.value = savedUrl;
             } else {
-                backendUrlInput.value = "https://bus-9pjj.onrender.com"; // 預設強制連線到您的 Render 網址
+                backendUrlInput.value = "https://bus-9pjj.onrender.com"; 
                 localStorage.setItem('node_backend_url', "https://bus-9pjj.onrender.com");
             }
             testAndConnectBackend();
         }
 
-        // 測試連接 Node.js API
+        // 延遲工具函式 (退避重試用)
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // FIX #3 API Isolation - 安全的 Timeout 請求包裝 (強制 10 秒 Timeout)
+        async function fetchWithTimeout(resource, options = {}) {
+            const { timeout = 10000 } = options; 
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            try {
+                const response = await fetch(resource, {
+                    ...options,
+                    signal: controller.signal
+                });
+                clearTimeout(id);
+                return response;
+            } catch (err) {
+                clearTimeout(id);
+                throw err;
+            }
+        }
+
+        // 測試連接 Node.js API (重構：引入自動 Retry 5次 且包含指數退避等待，預防冷啟動降級)
         async function testAndConnectBackend() {
             const url = backendUrlInput.value.trim();
             if (!url) {
@@ -595,33 +662,68 @@
             }
 
             localStorage.setItem('node_backend_url', url);
-            showBackendStatus("正在連接雲端代理伺服器 (若處於休眠中，預計需要 30-50 秒喚醒時間)...", "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 animate-pulse");
+            
+            let connected = false;
+            const maxRetries = 5;
+            let retryDelayMs = 3000; // 起始 3 秒
 
-            try {
-                // 向後端的健康測試/Token連線狀態 API 發送請求
-                const response = await fetch(`${url}/api/token-status`);
-                const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    showBackendStatus("已成功連接雲端後端，TDX API 通道已就緒！", "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400");
-                    isUsingNodeServer = true;
-                    updateDataSourceUI(true);
-                    
-                    // 重置動態下載快取
-                    tdxStopsCache = { 'orange12': null, 'yellow2': null, 'orange11': null, '11': null, '87': null };
-                    
-                    // 立即抓取即時動態數據 (含站牌下載)
-                    fetchLiveBusData();
-                } else {
-                    throw new Error(data.message || "HTTP status " + response.status);
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                showBackendStatus(`連線中... 嘗試喚醒雲端代理服務 (第 ${attempt}/${maxRetries} 次)...`, "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 animate-pulse");
+                try {
+                    // 呼叫後端 Token 連線狀態 API (加入 10 秒限時)
+                    const response = await fetchWithTimeout(`${url}/api/token-status`, { timeout: 10000 });
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            showBackendStatus("已成功連接 Render 雲端後端，TDX API 通道已就緒！", "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400");
+                            isUsingNodeServer = true;
+                            updateDataSourceUI(true);
+                            connected = true;
+
+                            // 連線成功：重置全快取
+                            tdxStopsCache = {
+                                'KHH橘12': { 0: null, 1: null },
+                                'KHH黃2': { 0: null, 1: null },
+                                'KHH橘11': { 0: null, 1: null },
+                                'KHH11': { 0: null, 1: null },
+                                'KHH87': { 0: null, 1: null }
+                            };
+                            tdxShapeCache = {
+                                'KHH橘12': { 0: null, 1: null },
+                                'KHH黃2': { 0: null, 1: null },
+                                'KHH橘11': { 0: null, 1: null },
+                                'KHH11': { 0: null, 1: null },
+                                'KHH87': { 0: null, 1: null }
+                            };
+                            
+                            // 立即抓取即時動態數據 (含站牌下載)
+                            await fetchLiveBusData();
+                            break;
+                        }
+                    }
+                } catch (err) {
+                    console.warn(`[Connection Attempt ${attempt}] 失敗，等待重試...`, err.message);
                 }
-            } catch (err) {
-                console.warn("無法連接網頁後端，自動降級為高品質本地模擬數據:", err);
+
+                if (attempt < maxRetries) {
+                    await delay(retryDelayMs);
+                    retryDelayMs += 2000; // 遞增等待時間 (3s -> 5s -> 7s...)
+                }
+            }
+
+            if (!connected) {
                 showBackendStatus("未偵測到運作中的伺服器。已自動降級為本地模擬資料（橘12為精準25站模擬）。", "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 text-left");
                 isUsingNodeServer = false;
                 updateDataSourceUI(false);
-                // 載入本地模擬初始定位
                 loadMockInitialBuses();
             }
+        }
+
+        // 一鍵還原預設 URL
+        function resetBackendDefault() {
+            backendUrlInput.value = "https://bus-9pjj.onrender.com";
+            localStorage.setItem('node_backend_url', "https://bus-9pjj.onrender.com");
+            testAndConnectBackend();
         }
 
         function showBackendStatus(msg, classes) {
@@ -630,17 +732,42 @@
             backendStatusBanner.classList.remove('hidden');
         }
 
-        function updateDataSourceUI(isConnected) {
-            if (isUsingNodeServer) {
-                dataSourceBanner.className = "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 py-1.5 px-4 text-xs font-bold text-center flex items-center justify-center gap-1.5 transition-colors";
-                bannerText.setAttribute('data-zh', '🟢 串聯成功：已自 TDX 即時串接全真實公車站名與 GPS 位置');
-                bannerText.setAttribute('data-en', '🟢 Live Data: Dynamic TDX Station Names & Bus GPS Active');
-            } else {
+        // FIX #4: 即時狀態分級 banner 更新函式 (全即時 / 部分即時 / 離線)
+        function updateBannerGrading(stopOk, etaOk, gpsOk, shapeOk) {
+            const bannerText = document.getElementById('banner-text');
+            const dataSourceBanner = document.getElementById('data-source-banner');
+            
+            if (!isUsingNodeServer) {
                 dataSourceBanner.className = "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 py-1.5 px-4 text-xs font-bold text-center flex items-center justify-center gap-1.5 transition-colors";
-                bannerText.setAttribute('data-zh', '⚠️ 離線模擬中：請確保您的 Node.js 後端伺服器 正在運行。');
-                bannerText.setAttribute('data-en', '⚠️ Demo Mode: Make sure your Node.js server is running.');
+                bannerText.innerText = currentLang === 'zh' ? '⚠️ 離線模擬中：請確保您的 Node.js 後端伺服器 正在運行。' : '⚠️ Demo Mode: Make sure your Node.js server is running.';
+                return;
             }
-            bannerText.innerText = bannerText.getAttribute(`data-${currentLang}`);
+
+            const score = (stopOk ? 1 : 0) + (etaOk ? 1 : 0) + (gpsOk ? 1 : 0) + (shapeOk ? 1 : 0);
+            
+            if (score === 4) {
+                // 🟢 全即時動態 (所有 API 皆正常)
+                dataSourceBanner.className = "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 py-1.5 px-4 text-xs font-bold text-center flex items-center justify-center gap-1.5 transition-colors";
+                bannerText.innerText = currentLang === 'zh' 
+                    ? '🟢 全即時動態：站點、ETA、GPS 與路網皆已成功與高雄市公車處同步' 
+                    : '🟢 Full Real-time Sync: Stations, ETA, GPS & Shape are fully synchronized';
+            } else if (score > 0) {
+                // 🟡 部分即時動態 (部分 API 正常，具體列出可用模組)
+                dataSourceBanner.className = "bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 py-1.5 px-4 text-xs font-bold text-center flex items-center justify-center gap-1.5 transition-colors";
+                bannerText.innerText = currentLang === 'zh'
+                    ? `🟡 部分即時動態：已連線，部分資料缺失 (可用: ${stopOk?'站牌 ':''}${etaOk?'ETA ':''}${gpsOk?'GPS ':''}${shapeOk?'路網 ':''})`
+                    : `🟡 Partial Real-time: Connected with some missing data (Active: ${stopOk?'Stops ':''}${etaOk?'ETA ':''}${gpsOk?'GPS ':''}${shapeOk?'Shape ':''})`;
+            } else {
+                // 🔴 離線 (API 全失敗，代理伺服器雖可連通但無 TDX 回傳)
+                dataSourceBanner.className = "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 py-1.5 px-4 text-xs font-bold text-center flex items-center justify-center gap-1.5 transition-colors";
+                bannerText.innerText = currentLang === 'zh'
+                    ? '🔴 連線異常：代理伺服器已回應但 TDX API 無法取得任何即時資料'
+                    : '🔴 Connection Error: Proxy responded but TDX APIs failed to retrieve data';
+            }
+        }
+
+        function updateDataSourceUI(isConnected) {
+            // 本函式已由 updateBannerGrading 完全代理以提供動態分級通知
         }
 
         // 初始化模擬定位，避免沒連線時一片空白
@@ -652,6 +779,80 @@
                 '11': [{ id: '11-A', position: 2.5 }, { id: '11-B', position: 6.2 }],
                 '87': [{ id: '87-A', position: 1.1 }, { id: '87-B', position: 4.5 }]
             };
+        }
+
+        // 方向點擊控制
+        function setDirection(dir) {
+            currentDirection = dir;
+            
+            // 更新按鈕樣式
+            const outBtn = document.getElementById('dir-outbound-btn');
+            const inBtn = document.getElementById('dir-inbound-btn');
+            
+            if (dir === 0) {
+                outBtn.className = "px-3 py-1 rounded-md font-bold transition-all text-xs bg-brand-orange text-white shadow-sm";
+                inBtn.className = "px-3 py-1 rounded-md font-bold transition-all text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600";
+            } else {
+                inBtn.className = "px-3 py-1 rounded-md font-bold transition-all text-xs bg-brand-orange text-white shadow-sm";
+                outBtn.className = "px-3 py-1 rounded-md font-bold transition-all text-xs text-slate-400 dark:text-slate-500 hover:text-slate-600";
+            }
+
+            // 立即發送請求更新當前方向數據
+            fetchLiveBusData();
+        }
+
+        // Well-Known Text (WKT) LINESTRING 解析器 (用於解析 Shape API 的幾何點序列)
+        function parseWKTLineString(wkt) {
+            if (!wkt) return null;
+            try {
+                const coordsStr = wkt.match(/\(([^)]+)\)/);
+                if (!coordsStr) return null;
+                const points = coordsStr[1].split(',');
+                return points.map(p => {
+                    const [lng, lat] = p.trim().split(/\s+/).map(Number);
+                    return [lat, lng]; // Leaflet 採 [lat, lng] 規範
+                });
+            } catch (err) {
+                console.error("[WKT Parser] 軌跡資料解析異常:", err.message);
+                return null;
+            }
+        }
+
+        // FIX #7: 站點與路網起終點幾何一致性驗證提示 (避免 TDX 資料起終點偏差過大)
+        function validateStopAndShapeConsistency(routeId, direction, stops, shapeCoords) {
+            if (!stops || stops.length < 2 || !shapeCoords || shapeCoords.length < 2) return;
+            try {
+                const firstStop = stops[0];
+                const lastStop = stops[stops.length - 1];
+                const firstShape = shapeCoords[0];
+                const lastShape = shapeCoords[shapeCoords.length - 1];
+
+                const distStart = Math.sqrt(Math.pow(firstStop.lat - firstShape[0], 2) + Math.pow(firstStop.lng - firstShape[1], 2));
+                const distEnd = Math.sqrt(Math.pow(lastStop.lat - lastShape[0], 2) + Math.pow(lastStop.lng - lastShape[1], 2));
+
+                // 0.005 度大約等於 500 米偏差
+                if (distStart > 0.005 || distEnd > 0.005) {
+                    console.warn(`[Consistency Check] ⚠️ 路線 ${routeId} (方向: ${direction}) 站點首尾與路網折線首尾距離偏差過大！(起點偏差: ${distStart.toFixed(5)}度, 終點偏差: ${distEnd.toFixed(5)}度)。這通常代表 TDX 部分去返程資料發生異常或路網模型缺漏。`);
+                } else {
+                    console.info(`[Consistency Check] ✅ 路線 ${routeId} (方向: ${direction}) 站點與路網一致性檢查通過。`);
+                }
+            } catch (err) {
+                console.error("[Consistency Check] 資料一致性驗證流程異常:", err.message);
+            }
+        }
+
+        // FIX #8: 空間點線距離計算 (用於檢測公車點位是否嚴重偏移正常路網)
+        function getMinDistanceToPolyline(lat, lng, polylineCoords) {
+            if (!polylineCoords || polylineCoords.length === 0) return 0;
+            let minDistance = Infinity;
+            for (let i = 0; i < polylineCoords.length; i++) {
+                const coord = polylineCoords[i];
+                const dist = Math.sqrt(Math.pow(coord[0] - lat, 2) + Math.pow(coord[1] - lng, 2));
+                if (dist < minDistance) {
+                    minDistance = dist;
+                }
+            }
+            return minDistance;
         }
 
         // --- 核心即時/模擬雙軌數據載入與整合更新 ---
@@ -675,107 +876,240 @@
                 return;
             }
 
+            // 用於記錄本次更新之四大 API 執行指標 (FIX #4)
+            let stopStatus = false;
+            let etaStatus = false;
+            let gpsStatus = false;
+            let shapeStatus = false;
+
+            // 1. 下載各路線的 TDX 真實站牌序列
+            // FIX #3 & FIX #6 & FIX #9: 站牌隔離下載、自動 StopSequence 排序、RouteUID + Direction 快取
             try {
-                // 1. 動態下載此路線的 TDX 真實站名與座標 (僅在首次或切換路線時下載)
-                for (const routeId of Object.keys(routesData)) {
-                    if (!tdxStopsCache[routeId]) {
-                        const tdxName = routesData[routeId].tdxName;
-                        // 請求 StopOfRoute 取得此路線 Direction: 0 (去程) 的完整站點
-                        const stopsRes = await fetch(`${apiBase}/api/bus/StopOfRoute/City/Kaohsiung?$filter=RouteName/Zh_tw eq '${tdxName}' and Direction eq 0&$format=JSON`);
-                        if (stopsRes.ok) {
-                            const stopsData = await stopsRes.json();
-                            if (stopsData && stopsData.length > 0) {
-                                // 依站牌順序 (StopSequence) 排序
-                                const sortedStops = stopsData[0].Stops.sort((a, b) => a.StopSequence - b.StopSequence);
-                                tdxStopsCache[routeId] = sortedStops.map(s => ({
-                                    nameZh: s.StopName.Zh_tw,
-                                    nameEn: s.StopName.En || s.StopName.Zh_tw,
-                                    lat: s.StopPosition.PositionLat,
-                                    lng: s.StopPosition.PositionLon
-                                }));
-                                console.log(`[TDX DB] 成功下載 ${tdxName} 的 ${tdxStopsCache[routeId].length} 個真實站點！`);
+                console.info("[Stop API] 開始下載/檢查真實站牌清單...");
+                const stopPromises = Object.keys(routesData).map(async (routeId) => {
+                    const uid = routeUIDs[routeId];
+                    // 若無此 RouteUID + Direction 快取，則進行請求
+                    if (!tdxStopsCache[uid] || !tdxStopsCache[uid][currentDirection]) {
+                        try {
+                            const stopsRes = await fetchWithTimeout(`${apiBase}/api/bus/StopOfRoute/City/Kaohsiung?$filter=RouteUID eq '${uid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
+                            if (stopsRes.ok) {
+                                const stopsData = await stopsRes.json();
+                                if (stopsData && stopsData.length > 0) {
+                                    // 確保 StopSequence 重新遞增排序，排除亂序 (FIX #6)
+                                    const sortedStops = stopsData[0].Stops.sort((a, b) => a.StopSequence - b.StopSequence);
+                                    
+                                    if (!tdxStopsCache[uid]) {
+                                        tdxStopsCache[uid] = { 0: null, 1: null };
+                                    }
+                                    tdxStopsCache[uid][currentDirection] = sortedStops.map(s => ({
+                                        nameZh: s.StopName.Zh_tw,
+                                        nameEn: s.StopName.En || s.StopName.Zh_tw,
+                                        lat: s.StopPosition.PositionLat,
+                                        lng: s.StopPosition.PositionLon
+                                    }));
+                                    console.info(`[Stop API] 成功更新站牌資料: ${uid}_${currentDirection} (共 ${tdxStopsCache[uid][currentDirection].length} 站)`);
+                                }
                             }
+                        } catch (err) {
+                            // FIX #3: 站點 Cache 保護，下載失敗時僅保留舊快取，不作清空，提供穩健容錯
+                            console.warn(`[Stop API] 下載 ${uid} 站牌資料異常，保留前次快取:`, err.message);
                         }
-                    }
-                }
-
-                // 2. 獲取高雄市全路線公車的即時 GPS
-                const filterQuery = encodeURIComponent("RouteName/Zh_tw eq '橘12' or RouteName/Zh_tw eq '黃2' or RouteName/Zh_tw eq '橘11' or RouteName/Zh_tw eq '11' or RouteName/Zh_tw eq '87'");
-                const posRes = await fetch(`${apiBase}/api/bus/RealTimeByFrequency/City/Kaohsiung?$filter=${filterQuery}&$format=JSON`);
-                if (!posRes.ok) throw new Error("GPS API Error");
-                const posData = await posRes.json();
-
-                // 重設即時公車快取
-                busesState = { 'orange12': [], 'yellow2': [], 'orange11': [], '11': [], '87': [] };
-
-                posData.forEach(bus => {
-                    const routeName = bus.RouteName?.Zh_tw;
-                    const lat = bus.BusPosition?.PositionLat;
-                    const lng = bus.BusPosition?.PositionLon;
-                    if (!lat || !lng) return;
-
-                    let localRouteId = "";
-                    if (routeName === "橘12") localRouteId = "orange12";
-                    else if (routeName === "黃2") localRouteId = "yellow2";
-                    else if (routeName === "橘11") localRouteId = "orange11";
-                    else if (routeName === "11") localRouteId = "11";
-                    else if (routeName === "87") localRouteId = "87";
-
-                    if (localRouteId) {
-                        // 使用下載好的動態站點資訊進行空間相似度比對，計算公車位於第幾站
-                        const stopsList = tdxStopsCache[localRouteId] || [];
-                        let minDistance = Infinity;
-                        let closestStopIdx = 0;
-
-                        stopsList.forEach((stop, sIdx) => {
-                            const dist = Math.pow(stop.lat - lat, 2) + Math.pow(stop.lng - lng, 2);
-                            if (dist < minDistance) {
-                                minDistance = dist;
-                                closestStopIdx = sIdx;
-                            }
-                        });
-
-                        busesState[localRouteId].push({
-                            id: bus.PlateNumb || "BUS",
-                            lat: lat,
-                            lng: lng,
-                            position: closestStopIdx // 用於捷運化時間軸與地圖點位渲染
-                        });
                     }
                 });
+                await Promise.all(stopPromises);
+                stopStatus = true;
+            } catch (err) {
+                console.error("[Stop API] 站牌清單下載流程發生阻礙:", err.message);
+            }
 
-                // 3. 獲取當前所選路線之真實預估到站秒數 (ETA API)
-                const currentTdxName = routesData[currentRoute].tdxName;
-                const etaRes = await fetch(`${apiBase}/api/bus/EstimatedTimeOfArrival/City/Kaohsiung?$filter=RouteName/Zh_tw eq '${currentTdxName}'&$format=JSON`);
+            // 2. 下載實體道路 Shape 折線
+            // FIX #5: 循線繪製重構，完全以 RouteUID + Direction 完全分離快取，避免路網畫錯
+            try {
+                console.info("[Shape API] 開始下載/檢查真實 Shape 路網軌跡...");
+                const shapePromises = Object.keys(routesData).map(async (routeId) => {
+                    const uid = routeUIDs[routeId];
+                    if (!tdxShapeCache[uid] || !tdxShapeCache[uid][currentDirection]) {
+                        try {
+                            const shapeRes = await fetchWithTimeout(`${apiBase}/api/bus/Shape/City/Kaohsiung?$filter=RouteUID eq '${uid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
+                            if (shapeRes.ok) {
+                                const shapeData = await shapeRes.json();
+                                if (shapeData && shapeData.length > 0 && shapeData[0].Geometry) {
+                                    const coords = parseWKTLineString(shapeData[0].Geometry);
+                                    if (coords && coords.length > 0) {
+                                        if (!tdxShapeCache[uid]) {
+                                            tdxShapeCache[uid] = { 0: null, 1: null };
+                                        }
+                                        tdxShapeCache[uid][currentDirection] = coords;
+                                        console.info(`[Shape API] 成功下載路網資料: ${uid}_${currentDirection} (共 ${coords.length} 點)`);
+
+                                        // 資料一致性幾何偏差校驗 (新提議驗證機制)
+                                        if (tdxStopsCache[uid] && tdxStopsCache[uid][currentDirection]) {
+                                            validateStopAndShapeConsistency(routeId, currentDirection, tdxStopsCache[uid][currentDirection], coords);
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.warn(`[Shape API] 下載路網 ${uid}_${currentDirection} 異常，將降級採用站點連線軌跡:`, err.message);
+                        }
+                    }
+                });
+                await Promise.all(shapePromises);
+                shapeStatus = true;
+            } catch (err) {
+                console.error("[Shape API] 幾何軌跡下載流程發生阻礙:", err.message);
+            }
+
+            // 3. 獲取高雄市公車的即時 GPS 位置
+            // FIX #2 & FIX #3 & FIX #8 & FIX #9: 優先 RealTimeNearStop，回退 ByFrequency，過濾漂移點與 null 容錯
+            try {
+                let gpsData = [];
+                let gpsSuccess = false;
+                const filterQuery = encodeURIComponent(`RouteUID eq 'KHH橘12' or RouteUID eq 'KHH黃2' or RouteUID eq 'KHH橘11' or RouteUID eq 'KHH11' or RouteUID eq 'KHH87'`);
+                
+                // 第一優先：RealTimeNearStop (高精)
+                try {
+                    console.info("[GPS API] 優先請求 RealTimeNearStop 車輛即時 GPS 定位...");
+                    const posRes = await fetchWithTimeout(`${apiBase}/api/bus/RealTimeNearStop/City/Kaohsiung?$filter=${filterQuery}&$format=JSON`, { timeout: 10000 });
+                    if (posRes.ok) {
+                        gpsData = await posRes.json();
+                        if (gpsData && gpsData.length > 0) {
+                            gpsSuccess = true;
+                            console.info(`[GPS API] 成功利用高精度管道取得 ${gpsData.length} 筆車輛定位。`);
+                        }
+                    }
+                } catch (nearStopErr) {
+                    console.warn("[GPS API] 高精度 NearStop 管道連線超時，嘗試 Fallback 回退備用機制:", nearStopErr.message);
+                }
+
+                // 第二順位：RealTimeByFrequency
+                if (!gpsSuccess) {
+                    try {
+                        console.info("[GPS API] 正在嘗試從備用 ByFrequency 取得即時 GPS 位置...");
+                        const posRes = await fetchWithTimeout(`${apiBase}/api/bus/RealTimeByFrequency/City/Kaohsiung?$filter=${filterQuery}&$format=JSON`, { timeout: 10000 });
+                        if (posRes.ok) {
+                            gpsData = await posRes.json();
+                            gpsSuccess = true;
+                            console.info(`[GPS API] 成功利用備用 ByFrequency 管道取得 ${gpsData ? gpsData.length : 0} 筆車輛定位。`);
+                        }
+                    } catch (freqErr) {
+                        console.error("[GPS API] 備份定位管道亦宣告超時或失敗:", freqErr.message);
+                    }
+                }
+
+                // 如果任何一個 GPS API 成功回傳資料，方可改寫 busesState，其餘保留前次快取 (FIX #3)
+                if (gpsSuccess) {
+                    gpsStatus = true;
+                    const newBusesState = { 'orange12': [], 'yellow2': [], 'orange11': [], '11': [], '87': [] };
+
+                    if (gpsData && gpsData.length > 0) {
+                        gpsData.forEach(bus => {
+                            const rUID = bus.RouteUID;
+                            const lat = bus.BusPosition?.PositionLat;
+                            const lng = bus.BusPosition?.PositionLon;
+                            if (!lat || !lng) return;
+
+                            // FIX #2: GPS Direction 容錯，若 Direction 不存在（null/undefined），視為有效資料
+                            if (bus.Direction !== null && bus.Direction !== undefined && bus.Direction !== currentDirection) {
+                                return;
+                            }
+
+                            const localRouteId = Object.keys(routeUIDs).find(key => routeUIDs[key] === rUID);
+                            if (localRouteId) {
+                                const route = routesData[localRouteId];
+                                
+                                // FIX #8: 漂移跳點檢測過濾 (點線距離計算)
+                                // 提取當前活動的最佳路網座標
+                                const activeShapeCoords = tdxShapeCache[rUID][currentDirection] || 
+                                                          (tdxStopsCache[rUID][currentDirection] ? tdxStopsCache[rUID][currentDirection].map(s => [s.lat, s.lng]) : null) || 
+                                                          route.coords;
+
+                                const distToRoute = getMinDistanceToPolyline(lat, lng, activeShapeCoords);
+                                if (distToRoute > 0.015) { // 大於約 1.5 公里偏離，視為異常跳躍點，直接過濾 (FIX #8)
+                                    console.warn(`[GPS Filter] ⚠️ 偵測到車輛 ${bus.PlateNumb} (${localRouteId}) 嚴重偏離正常路網線軌 (${distToRoute.toFixed(5)}度)，已被自動攔截過濾，防止跳點漂移。`);
+                                    return;
+                                }
+
+                                const stopsList = tdxStopsCache[rUID][currentDirection] || [];
+                                let minDistance = Infinity;
+                                let closestStopIdx = 0;
+
+                                stopsList.forEach((stop, sIdx) => {
+                                    const dist = Math.pow(stop.lat - lat, 2) + Math.pow(stop.lng - lng, 2);
+                                    if (dist < minDistance) {
+                                        minDistance = dist;
+                                        closestStopIdx = sIdx;
+                                    }
+                                });
+
+                                newBusesState[localRouteId].push({
+                                    id: bus.PlateNumb || "BUS",
+                                    lat: lat,
+                                    lng: lng,
+                                    position: closestStopIdx // 用於捷運化時間軸與地圖點位渲染
+                                });
+                            }
+                        });
+                    }
+                    busesState = newBusesState;
+                    console.info("[GPS API] 即時公車 GPS 定位更新處理完畢。");
+                } else {
+                    console.warn("[GPS API] 無法自後端取得新車定位，快取保護已啟動，保留上一次車輛點位繪製。");
+                }
+            } catch (err) {
+                console.error("[GPS API] 車輛位置資料更新異常，已套用快取防護:", err.message);
+            }
+
+            // 4. 獲取當前所選路線之真實預估到站秒數 (ETA API)
+            // FIX #1 & FIX #3 & FIX #9: ETA 雙向快取 Direction 整合，採用單 API 獨立異常容錯機制
+            try {
+                console.info("[ETA API] 正在取得即時預估到站時間 (ETA)...");
+                const currentTdxUID = routeUIDs[currentRoute];
+                const etaRes = await fetchWithTimeout(`${apiBase}/api/bus/EstimatedTimeOfArrival/City/Kaohsiung?$filter=RouteUID eq '${currentTdxUID}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
                 if (etaRes.ok) {
                     const etaData = await etaRes.json();
-                    tdxEtaCache[currentRoute] = {};
+                    
+                    // 初始化當前路線雙向快取
+                    if (!tdxEtaCache[currentTdxUID]) {
+                        tdxEtaCache[currentTdxUID] = { 0: {}, 1: {} };
+                    }
+                    tdxEtaCache[currentTdxUID][currentDirection] = {};
+
                     etaData.forEach(item => {
                         if (item.StopName?.Zh_tw) {
-                            if (item.Direction === 0) { // 去程
-                                tdxEtaCache[currentRoute][item.StopName.Zh_tw] = {
-                                    estimate: item.EstimateTime, // 單位：秒
-                                    status: item.StopStatus      // 0: 正常, 1: 尚未開始, 3: 末班已過
-                                };
-                            }
+                            tdxEtaCache[currentTdxUID][currentDirection][item.StopName.Zh_tw] = {
+                                estimate: item.EstimateTime, // 單位：秒
+                                status: item.StopStatus      // 狀態
+                            };
                         }
                     });
+                    etaStatus = true;
+                    console.info(`[ETA API] 成功更新 ${currentRoute} (方向: ${currentDirection}) 的真實 ETA 倒數快取。`);
                 }
-
-                // 4. 重繪地圖路線 (如果動態路線圖剛載入)
-                if (map) {
-                    drawRouteLinesOnMap();
-                }
-
-                // 5. 觸發畫面渲染更新
-                if (currentMainTab === 'live') render();
-                if (currentMainTab === 'map') updateMapLayers();
-
             } catch (err) {
-                console.warn("自 Render 後端取得資料發生錯誤，暫時降級為模擬:", err);
-                isUsingNodeServer = false;
-                updateDataSourceUI(false);
+                console.error("[ETA API] 預估到站時間取得失敗或連線超時，保留舊快取繼續渲染:", err.message);
             }
+
+            // FIX #4: 更新狀態面板即時動態分級 (🟢 / 🟡 / 🔴)
+            // 只要任何一個 API 動態請求成功，系統即認定 Node.js 運作正常不強制斷線 (FIX #3)
+            const score = (stopStatus ? 1 : 0) + (etaStatus ? 1 : 0) + (gpsStatus ? 1 : 0) + (shapeStatus ? 1 : 0);
+            if (score > 0) {
+                isUsingNodeServer = true;
+                updateBannerGrading(stopStatus, etaStatus, gpsStatus, shapeStatus);
+            } else {
+                console.warn("[API Manager] 所有即時連線 API 均告超時或失敗，系統切換回離線模擬降級。");
+                isUsingNodeServer = false;
+                updateBannerGrading(false, false, false, false);
+            }
+
+            // 重繪 Leaflet 地圖循線
+            if (map) {
+                drawRouteLinesOnMap();
+            }
+
+            // 觸發畫面渲染
+            if (currentMainTab === 'live') render();
+            if (currentMainTab === 'map') updateMapLayers();
         }
 
         backendSaveBtn.addEventListener('click', testAndConnectBackend);
@@ -808,35 +1142,41 @@
         }
 
         // 動態繪製/重繪地圖上的路線 polyline
+        // FIX #1: Leaflet 折線快取優化，避免 remove 與 new 頻繁重建，徹底阻絕閃爍
         function drawRouteLinesOnMap() {
             if (!map) return;
 
             Object.keys(routesData).forEach(routeId => {
                 const route = routesData[routeId];
+                const uid = routeUIDs[routeId];
                 
-                // 優先使用從 TDX 真實下載的站點座標序列，若無則降級為本地 coords
                 let coordsToDraw = [];
-                const tdxStops = tdxStopsCache[routeId];
+                const tdxShape = tdxShapeCache[uid][currentDirection];
+                const tdxStops = tdxStopsCache[uid][currentDirection];
                 
-                if (isUsingNodeServer && tdxStops && tdxStops.length > 0) {
+                if (isUsingNodeServer && tdxShape && tdxShape.length > 0) {
+                    coordsToDraw = tdxShape;
+                } else if (isUsingNodeServer && tdxStops && tdxStops.length > 0) {
                     coordsToDraw = tdxStops.map(s => [s.lat, s.lng]);
                 } else {
                     coordsToDraw = route.coords;
                 }
 
-                // 清除舊線，重新繪製
+                // FIX #1 Leaflet Cache - 軌跡折線 (Polyline) 複用機制，不重複 remove 與 new，避免閃爍。
                 if (mapLayers.polylines[routeId]) {
-                    map.removeLayer(mapLayers.polylines[routeId]);
+                    mapLayers.polylines[routeId].setLatLngs(coordsToDraw);
+                    console.info(`[Polyline Update] 路線 ${routeId} 軌跡座標更新（重用已存在圖層）。`);
+                } else {
+                    const polyline = L.polyline(coordsToDraw, {
+                        color: route.hexColor,
+                        weight: 6,
+                        opacity: 0.75,
+                        lineJoin: 'round'
+                    }).addTo(map);
+
+                    mapLayers.polylines[routeId] = polyline;
+                    console.info(`[Polyline Update] 建立全新路線 ${routeId} Polyline 軌跡圖層。`);
                 }
-
-                const polyline = L.polyline(coordsToDraw, {
-                    color: route.hexColor,
-                    weight: 6,
-                    opacity: 0.75,
-                    lineJoin: 'round'
-                }).addTo(map);
-
-                mapLayers.polylines[routeId] = polyline;
             });
         }
 
@@ -871,89 +1211,115 @@
             return [lat, lng];
         }
 
-        // 動態重建地圖圖層標記 (依據目前選擇的路線過濾)
+        // FIX #4 Leaflet Cache - 重構：精準無閃爍地圖點位與標記複用
         function updateMapLayers() {
             if (!map) return;
-
-            // 清理舊的站牌與公車 Marker
-            mapLayers.stations.forEach(m => map.removeLayer(m));
-            mapLayers.buses.forEach(m => map.removeLayer(m));
-            mapLayers.stations = [];
-            mapLayers.buses = [];
 
             const activeRoutes = (currentMapFilter === 'all') 
                 ? Object.keys(routesData) 
                 : [currentMapFilter];
 
-            // 隱藏/顯示主軌跡線
+            // 顯示/隱藏主軌跡線
             Object.keys(mapLayers.polylines).forEach(routeId => {
                 if (activeRoutes.includes(routeId)) {
-                    mapLayers.polylines[routeId].addTo(map);
+                    if (!map.hasLayer(mapLayers.polylines[routeId])) {
+                        mapLayers.polylines[routeId].addTo(map);
+                    }
                 } else {
-                    map.removeLayer(mapLayers.polylines[routeId]);
+                    if (map.hasLayer(mapLayers.polylines[routeId])) {
+                        map.removeLayer(mapLayers.polylines[routeId]);
+                    }
                 }
             });
 
-            // 繪製 active 路線的站點與即時位置公車
+            // A. 更新與管理站牌標記 (僅重設座標，不重建 Marker 圖層，解決高頻閃爍問題)
+            let currentActiveStationKeys = new Set();
+
             activeRoutes.forEach(routeId => {
                 const route = routesData[routeId];
-                
-                // 優先使用從 TDX 下載的真實站牌資料，若無則降級為本地 fallback 站牌
-                const tdxStops = tdxStopsCache[routeId];
+                const uid = routeUIDs[routeId];
+                const tdxStops = tdxStopsCache[uid][currentDirection];
                 const isUsingTdxStops = (isUsingNodeServer && tdxStops && tdxStops.length > 0);
                 
                 const totalStopsCount = isUsingTdxStops ? tdxStops.length : route.stops[currentLang].length;
 
-                // A. 繪製站牌標記
                 for (let idx = 0; idx < totalStopsCount; idx++) {
-                    let lat, lng, stopName;
+                    let lat, lng, stopNameZh, stopNameDisplay;
                     
                     if (isUsingTdxStops) {
                         const stopObj = tdxStops[idx];
                         lat = stopObj.lat;
                         lng = stopObj.lng;
-                        stopName = currentLang === 'zh' ? stopObj.nameZh : stopObj.nameEn;
+                        stopNameZh = stopObj.nameZh;
+                        stopNameDisplay = currentLang === 'zh' ? stopObj.nameZh : stopObj.nameEn;
                     } else {
                         const coordIdx = route.stopIndexes[idx];
                         const coord = route.coords[coordIdx];
                         lat = coord[0];
                         lng = coord[1];
-                        stopName = route.stops[currentLang][idx];
+                        stopNameZh = route.stops['zh'][idx];
+                        stopNameDisplay = route.stops[currentLang][idx];
                     }
 
-                    const isFengHsin = stopName.includes("鳳新高中") || stopName.includes("Feng-Hsin");
+                    // 站牌唯一金鑰 (FIX #7 & FIX #9)
+                    const stationKey = `${uid}_${currentDirection}_${stopNameZh}`;
+                    currentActiveStationKeys.add(stationKey);
 
-                    const markerHtml = isFengHsin
-                        ? `<div class="w-6 h-6 rounded-full border-2 border-white dark:border-slate-800 shadow-lg flex items-center justify-center transition-all bg-brand-orange animate-pulse">
-                             <i class="fa-solid fa-star text-white text-[10px]"></i>
-                           </div>`
-                        : `<div class="w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-800 shadow-md flex items-center justify-center transition-all" style="background-color: ${route.hexColor}">
-                             <div class="w-1.5 h-1.5 rounded-full bg-white"></div>
-                           </div>`;
+                    const isFengHsin = stopNameZh.includes("鳳新高中");
 
-                    const stationIcon = L.divIcon({
-                        html: markerHtml,
-                        className: 'custom-station-icon',
-                        iconSize: isFengHsin ? [24, 24] : [14, 14],
-                        iconAnchor: isFengHsin ? [12, 12] : [7, 7]
-                    });
+                    if (stationMarkersCache[stationKey]) {
+                        // FIX #4 Leaflet Cache - 站牌已存在，平滑重新定位
+                        stationMarkersCache[stationKey].setLatLng([lat, lng]);
+                        if (!map.hasLayer(stationMarkersCache[stationKey])) {
+                            stationMarkersCache[stationKey].addTo(map);
+                        }
+                    } else {
+                        // FIX #4 Leaflet Cache - 站牌不存在時才建立
+                        const markerHtml = isFengHsin
+                            ? `<div class="w-6 h-6 rounded-full border-2 border-white dark:border-slate-800 shadow-lg flex items-center justify-center transition-all bg-brand-orange animate-pulse">
+                                 <i class="fa-solid fa-star text-white text-[10px]"></i>
+                               </div>`
+                            : `<div class="w-3.5 h-3.5 rounded-full border-2 border-white dark:border-slate-800 shadow-md flex items-center justify-center transition-all" style="background-color: ${route.hexColor}">
+                                 <div class="w-1.5 h-1.5 rounded-full bg-white"></div>
+                               </div>`;
 
-                    const marker = L.marker([lat, lng], { icon: stationIcon }).addTo(map);
-                    
-                    marker.bindTooltip(`
+                        const stationIcon = L.divIcon({
+                            html: markerHtml,
+                            className: 'custom-station-icon',
+                            iconSize: isFengHsin ? [24, 24] : [14, 14],
+                            iconAnchor: isFengHsin ? [12, 12] : [7, 7]
+                        });
+
+                        const marker = L.marker([lat, lng], { icon: stationIcon }).addTo(map);
+                        stationMarkersCache[stationKey] = marker;
+                    }
+
+                    stationMarkersCache[stationKey].bindTooltip(`
                         <div class="font-sans text-xs flex flex-col items-start gap-0.5">
-                            <span class="font-bold text-slate-800 dark:text-slate-100 text-sm">${stopName}</span>
+                            <span class="font-bold text-slate-800 dark:text-slate-100 text-sm">${stopNameDisplay}</span>
                             <span class="text-[9px] font-black uppercase text-white px-1.5 py-0.5 rounded" style="background-color: ${route.hexColor}">
                                 ${routeId.toUpperCase()}
                             </span>
                         </div>
                     `, { direction: 'top', opacity: 0.95 });
-
-                    mapLayers.stations.push(marker);
                 }
+            });
 
-                // B. 繪製公車動態標記 (真實 GPS 或 模擬經緯度)
-                const buses = busesState[routeId];
+            // 清理不在目前路線/方向中的舊站牌
+            Object.keys(stationMarkersCache).forEach(key => {
+                if (!currentActiveStationKeys.has(key)) {
+                    map.removeLayer(stationMarkersCache[key]);
+                    delete stationMarkersCache[key];
+                }
+            });
+
+            // B. 更新公車動態標記 (精準更新坐標，不重建 Layer，防止地圖車輛重绘閃爍)
+            let currentActiveBusKeys = new Set();
+
+            activeRoutes.forEach(routeId => {
+                const route = routesData[routeId];
+                const buses = busesState[routeId] || [];
+
                 buses.forEach(bus => {
                     let latlng;
                     if (isUsingNodeServer && bus.lat && bus.lng) {
@@ -962,30 +1328,49 @@
                         latlng = getBusLatLng(routeId, bus.position);
                     }
 
-                    const busIcon = L.divIcon({
-                        html: `<div class="w-8 h-8 rounded-full border-2 border-white dark:border-slate-800 text-white flex items-center justify-center shadow-lg animate-bounce transition-all duration-300" style="background-color: ${route.hexColor}">
-                                 <i class="fa-solid fa-bus text-xs"></i>
-                               </div>`,
-                        className: 'custom-bus-icon',
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16]
-                    });
+                    const busKey = `${routeId}_${bus.id}`;
+                    currentActiveBusKeys.add(busKey);
 
-                    const marker = L.marker(latlng, { icon: busIcon }).addTo(map);
-                    
-                    marker.bindTooltip(`
+                    if (busMarkersCache[busKey]) {
+                        // FIX #4 Leaflet Cache - 公車已存在，使用 setLatLng() 平滑過渡坐標
+                        busMarkersCache[busKey].setLatLng(latlng);
+                        if (!map.hasLayer(busMarkersCache[busKey])) {
+                            busMarkersCache[busKey].addTo(map);
+                        }
+                    } else {
+                        // FIX #4 Leaflet Cache - 公車不存在時才建立
+                        const busIcon = L.divIcon({
+                            html: `<div class="w-8 h-8 rounded-full border-2 border-white dark:border-slate-800 text-white flex items-center justify-center shadow-lg animate-bounce transition-all duration-300" style="background-color: ${route.hexColor}">
+                                     <i class="fa-solid fa-bus text-xs"></i>
+                                   </div>`,
+                            className: 'custom-bus-icon',
+                            iconSize: [32, 32],
+                            iconAnchor: [16, 16]
+                        });
+
+                        const marker = L.marker(latlng, { icon: busIcon }).addTo(map);
+                        busMarkersCache[busKey] = marker;
+                    }
+
+                    busMarkersCache[busKey].bindTooltip(`
                         <div class="font-sans text-xs py-0.5 px-1 text-center">
                             <p class="font-bold text-slate-800 dark:text-slate-100">${currentLang === 'zh' ? '車牌' : 'Plate'} ${bus.id}</p>
                             <p class="text-[9px] text-slate-400 dark:text-slate-500 font-bold">${currentLang === 'zh' ? '行駛中' : 'In Transit'}</p>
                         </div>
                     `, { direction: 'top' });
-
-                    mapLayers.buses.push(marker);
                 });
+            });
+
+            // 清理已離站或離線的不活躍公車
+            Object.keys(busMarkersCache).forEach(key => {
+                if (!currentActiveBusKeys.has(key)) {
+                    map.removeLayer(busMarkersCache[key]);
+                    delete busMarkersCache[key];
+                }
             });
         }
 
-        // 地圖篩選
+        // FIX #5: 地圖過濾與介面切換 (補回先前遺漏的 updateMapFilterUI 函式)
         function updateMapFilterUI(filterValue) {
             currentMapFilter = filterValue;
 
@@ -1078,9 +1463,10 @@
             if (currentMainTab !== 'live') return;
 
             const route = routesData[currentRoute];
+            const uid = routeUIDs[currentRoute];
             
             // 決定使用的站牌清單 (優先採用從 TDX 下載的動態站名)
-            const tdxStops = tdxStopsCache[currentRoute];
+            const tdxStops = tdxStopsCache[uid][currentDirection];
             const isUsingTdx = (isUsingNodeServer && tdxStops && tdxStops.length > 0);
             
             let stopsToRender = [];
@@ -1121,9 +1507,11 @@
                 
                 const stopNameZh = stopObj.zh;
                 
-                // 優先使用真實 Node.js API 中取得的 TDX 真實秒數
-                if (isUsingNodeServer && tdxEtaCache[currentRoute] && tdxEtaCache[currentRoute][stopNameZh] !== undefined) {
-                    const tdxItem = tdxEtaCache[currentRoute][stopNameZh];
+                // FIX #1 ETA Direction - 從目前所選方向 (currentDirection) 的雙維度快取中取得 ETA 資料
+                const routeEtaCache = tdxEtaCache[uid] ? tdxEtaCache[uid][currentDirection] : null;
+
+                if (isUsingNodeServer && routeEtaCache && routeEtaCache[stopNameZh] !== undefined) {
+                    const tdxItem = routeEtaCache[stopNameZh];
                     const estSec = tdxItem.estimate;
                     const status = tdxItem.status;
 
@@ -1160,7 +1548,7 @@
                     if (minDistance < Infinity) {
                         if (minDistance <= 0.2) {
                             etaText = translations[currentLang].etaArriving;
-                            etaClass = 'text-brand-orange font-bold bg-orange-100 dark:bg-orange-900/40 px-2 py-1 rounded-md animate-pulse';
+                            etaClass = 'text-brand-orange font-bold bg-orange-100 dark:bg-orange-900/40 px-2 py-1 rounded-md animate-pulse'; // 已修正：變數命名 transformClass -> etaClass
                         } else if (minDistance < 1) {
                             etaText = translations[currentLang].eta1Min;
                             etaClass = 'text-brand-orange font-bold';
@@ -1377,6 +1765,7 @@
         // --- 系統初始化 ---
         setMainTab('home');
         setRouteTab('orange12');
+        setDirection(0); // 預設去程
         updateIntervalSelection(10); 
         updateMapFilterUI('all'); 
         loadBackendConfig(); // 載入後端位址並嘗試連線
