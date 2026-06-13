@@ -129,16 +129,22 @@
                     <span id="banner-text">目前為模擬數據，請確保您的 Node.js 後端伺服器 正在運行。</span>
                 </div>
 
-                <!-- 路線切換子頁籤 -->
-                <nav class="flex bg-white dark:bg-slate-900 shadow-sm z-10 transition-colors duration-300">
-                    <button class="route-tab-btn flex-1 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="orange12">
+                <!-- 路線切換子頁籤 (支援橫向滑動) -->
+                <nav class="flex bg-white dark:bg-slate-900 shadow-sm z-10 overflow-x-auto no-scrollbar whitespace-nowrap transition-colors duration-300">
+                    <button class="route-tab-btn flex-shrink-0 px-4 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="orange12">
                         <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500 mr-1"></span> 橘12
                     </button>
-                    <button class="route-tab-btn flex-1 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="yellow2">
+                    <button class="route-tab-btn flex-shrink-0 px-4 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="yellow2">
                         <span class="inline-block w-2.5 h-2.5 rounded-full bg-green-500 mr-1"></span> 黃2
                     </button>
-                    <button class="route-tab-btn flex-1 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="orange11">
+                    <button class="route-tab-btn flex-shrink-0 px-4 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="orange11">
                         <span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 mr-1"></span> 橘11
+                    </button>
+                    <button class="route-tab-btn flex-shrink-0 px-4 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="11">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-pink-500 mr-1"></span> 11路
+                    </button>
+                    <button class="route-tab-btn flex-shrink-0 px-4 py-3 text-sm sm:text-base font-bold text-slate-400 dark:text-slate-500 border-b-4 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" data-route="87">
+                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-purple-500 mr-1"></span> 87路
                     </button>
                 </nav>
 
@@ -169,19 +175,25 @@
 
             <!-- 3. 路網圖分頁 (真實道路 Leaflet 地圖) -->
             <section id="view-map" class="flex-1 relative flex flex-col hidden">
-                <!-- 頂部浮動過濾器 Pill Control (Z-INDEX 必須高於地圖) -->
-                <div class="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 dark:bg-slate-900/95 shadow-lg rounded-full p-1.5 flex gap-1 border border-slate-200/60 dark:border-slate-700/60 backdrop-blur-md transition-all w-[90%] max-w-[340px]">
-                    <button class="map-filter-btn flex-1 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="all">
+                <!-- 頂部浮動過濾器 Pill Control (支援橫向滑動) -->
+                <div class="absolute top-4 left-1/2 transform -translate-x-1/2 z-[1000] bg-white/95 dark:bg-slate-900/95 shadow-lg rounded-full p-1.5 flex gap-1 border border-slate-200/60 dark:border-slate-700/60 backdrop-blur-md transition-all w-[95%] max-w-[480px] overflow-x-auto no-scrollbar flex-nowrap">
+                    <button class="map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="all">
                         <span data-zh="全部" data-en="All">全部</span>
                     </button>
-                    <button class="map-filter-btn flex-1 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="orange12">
+                    <button class="map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="orange12">
                         <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-0.5"></span>橘12
                     </button>
-                    <button class="map-filter-btn flex-1 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="yellow2">
+                    <button class="map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="yellow2">
                         <span class="inline-block w-2 h-2 rounded-full bg-green-500 mr-0.5"></span>黃2
                     </button>
-                    <button class="map-filter-btn flex-1 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="orange11">
+                    <button class="map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="orange11">
                         <span class="inline-block w-2 h-2 rounded-full bg-blue-500 mr-0.5"></span>橘11
+                    </button>
+                    <button class="map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="11">
+                        <span class="inline-block w-2 h-2 rounded-full bg-pink-500 mr-0.5"></span>11路
+                    </button>
+                    <button class="map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center focus:outline-none" data-filter="87">
+                        <span class="inline-block w-2 h-2 rounded-full bg-purple-500 mr-0.5"></span>87路
                     </button>
                 </div>
 
@@ -264,7 +276,7 @@
 
                 <!-- 系統資訊 -->
                 <div class="text-center text-xs text-slate-400 pt-6">
-                    <p>放學公車導航看板 v2.5 (Fully Dynamic API Edition)</p>
+                    <p>放學公車導航看板 v2.6 (Auto-Routing & Deep Sync)</p>
                     <p class="mt-1">© 2026 High School Bus Tracker Corp.</p>
                 </div>
             </section>
@@ -447,29 +459,75 @@
                     [22.51200, 120.39200]  // 林園站
                 ],
                 stopIndexes: [0, 1, 3, 5, 7, 9, 11, 13]
+            },
+            '11': {
+                tdxName: '11',
+                color: 'text-pink-500',
+                lineColor: 'bg-pink-500',
+                hexColor: '#ec4899',
+                stops: {
+                    zh: ['瑞豐站 (起點)', '武營路口', '崗山仔', '輕軌籬仔內站', '二聖一路口', '光華路口', '捷運三多商圈站', '捷運中央公園站', '鹽埕埔 (終點)'],
+                    en: ['Ruifeng Station (Start)', 'Wuying Rd. Int.', 'Gangshanzi', 'LRT Lizihnei Station', 'Ersheng 1st Rd. Int.', 'Guanghua Rd. Int.', 'MRT Sanduo Shopping Dist.', 'MRT Central Park', 'Yanchengpu (Term.)']
+                },
+                coords: [
+                    [22.60780, 120.33410], // 瑞豐站
+                    [22.61120, 120.33050], // 武營路口
+                    [22.60520, 120.32510], // 崗山仔
+                    [22.60150, 120.31880], // 輕軌籬仔內站
+                    [22.60950, 120.31550], // 二聖一路口
+                    [22.61450, 120.31150], // 光華路口
+                    [22.61380, 120.30350], // 三多商圈
+                    [22.62410, 120.30180], // 中央公園
+                    [22.62730, 120.28580]  // 鹽埕埔
+                ],
+                stopIndexes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+            },
+            '87': {
+                tdxName: '87',
+                color: 'text-purple-500',
+                lineColor: 'bg-purple-500',
+                hexColor: '#a855f7',
+                stops: {
+                    zh: ['鳳山轉運站 (起點)', '東門里', '鳳山國中', '大東文化藝術中心', '鳳山高中', '建軍站(捷運衛武營站) (終點)'],
+                    en: ['Fengshan Transfer Stn. (Start)', 'Dongmen Li', 'Fengshan JHS', 'Dadong Art Center', 'Fengshan HS', 'Jianjun Station (Term.)']
+                },
+                coords: [
+                    [22.62480, 120.35920], // 鳳山轉運站
+                    [22.62650, 120.36350], // 東門里
+                    [22.62780, 120.36650], // 鳳山國中
+                    [22.62510, 120.35710], // 大東文化藝術中心
+                    [22.62450, 120.34750], // 鳳山高中
+                    [22.62470, 120.34210]  // 捷運衛武營站
+                ],
+                stopIndexes: [0, 1, 2, 3, 4, 5]
             }
         };
 
-        // 系統運作中的公車與站牌動態暫存 (連線後會被 TDX 下載的真實數據徹底取代)
+        // 系統運作中的公車與站牌動態暫存
         let busesState = {
             'orange12': [],
             'yellow2': [],
-            'orange11': []
+            'orange11': [],
+            '11': [],
+            '87': []
         };
 
         // 即時預估到站秒數暫存結構：{ routeId: { stopNameZh: { estimate:秒數, status:狀態 } } }
         let tdxEtaCache = {
             'orange12': {},
             'yellow2': {},
-            'orange11': {}
+            'orange11': {},
+            '11': {},
+            '87': {}
         };
 
         // TDX 真實下載並解析後的站牌快取結構 (去程 Direction: 0)
-        // 格式：{ routeId: [ { nameZh, nameEn, lat, lng }, ... ] }
         let tdxStopsCache = {
             'orange12': null,
             'yellow2': null,
-            'orange11': null
+            'orange11': null,
+            '11': null,
+            '87': null
         };
 
         // 應用程式狀態變數
@@ -516,11 +574,14 @@
         // 🔑 後端代理伺服器連接與資料載入
         // ==========================================
         
-        // 自 LocalStorage 載入歷史設定
+        // 自 LocalStorage 載入歷史設定 (已修正：當無本地快取時，自動強制採用預設雲端後端網址)
         function loadBackendConfig() {
             const savedUrl = localStorage.getItem('node_backend_url');
-            if (savedUrl) {
+            if (savedUrl && savedUrl.trim() !== "") {
                 backendUrlInput.value = savedUrl;
+            } else {
+                backendUrlInput.value = "https://bus-9pjj.onrender.com"; // 預設強制連線到您的 Render 網址
+                localStorage.setItem('node_backend_url', "https://bus-9pjj.onrender.com");
             }
             testAndConnectBackend();
         }
@@ -534,19 +595,19 @@
             }
 
             localStorage.setItem('node_backend_url', url);
-            showBackendStatus("正在連接 Render 雲端伺服器 (首載需等待休眠喚醒)...", "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 animate-pulse");
+            showBackendStatus("正在連接雲端代理伺服器 (若處於休眠中，預計需要 30-50 秒喚醒時間)...", "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 animate-pulse");
 
             try {
                 // 向後端的健康測試/Token連線狀態 API 發送請求
                 const response = await fetch(`${url}/api/token-status`);
                 const data = await response.json();
                 if (response.ok && data.status === 'success') {
-                    showBackendStatus("已成功連接 Render 雲端後端，TDX API 通道已就緒！", "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400");
+                    showBackendStatus("已成功連接雲端後端，TDX API 通道已就緒！", "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400");
                     isUsingNodeServer = true;
                     updateDataSourceUI(true);
                     
                     // 重置動態下載快取
-                    tdxStopsCache = { 'orange12': null, 'yellow2': null, 'orange11': null };
+                    tdxStopsCache = { 'orange12': null, 'yellow2': null, 'orange11': null, '11': null, '87': null };
                     
                     // 立即抓取即時動態數據 (含站牌下載)
                     fetchLiveBusData();
@@ -554,7 +615,7 @@
                     throw new Error(data.message || "HTTP status " + response.status);
                 }
             } catch (err) {
-                console.warn("無法連接 Node.js 伺服器，自動降級為高品質本地模擬數據:", err);
+                console.warn("無法連接網頁後端，自動降級為高品質本地模擬數據:", err);
                 showBackendStatus("未偵測到運作中的伺服器。已自動降級為本地模擬資料（橘12為精準25站模擬）。", "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 text-left");
                 isUsingNodeServer = false;
                 updateDataSourceUI(false);
@@ -587,7 +648,9 @@
             busesState = {
                 'orange12': [{ id: 'O12-A', position: 1.2 }, { id: 'O12-B', position: 11.8 }, { id: 'O12-C', position: 20.5 }],
                 'yellow2': [{ id: 'Y2-A', position: 2.1 }],
-                'orange11': [{ id: 'O11-A', position: 1.5 }, { id: 'O11-B', position: 5.0 }]
+                'orange11': [{ id: 'O11-A', position: 1.5 }, { id: 'O11-B', position: 5.0 }],
+                '11': [{ id: '11-A', position: 2.5 }, { id: '11-B', position: 6.2 }],
+                '87': [{ id: '87-A', position: 1.1 }, { id: '87-B', position: 4.5 }]
             };
         }
 
@@ -637,12 +700,13 @@
                 }
 
                 // 2. 獲取高雄市全路線公車的即時 GPS
-                const posRes = await fetch(`${apiBase}/api/bus/RealTimeByFrequency/City/Kaohsiung?$filter=RouteName/Zh_tw eq '橘12' or RouteName/Zh_tw eq '黃2' or RouteName/Zh_tw eq '橘11'&$format=JSON`);
+                const filterQuery = encodeURIComponent("RouteName/Zh_tw eq '橘12' or RouteName/Zh_tw eq '黃2' or RouteName/Zh_tw eq '橘11' or RouteName/Zh_tw eq '11' or RouteName/Zh_tw eq '87'");
+                const posRes = await fetch(`${apiBase}/api/bus/RealTimeByFrequency/City/Kaohsiung?$filter=${filterQuery}&$format=JSON`);
                 if (!posRes.ok) throw new Error("GPS API Error");
                 const posData = await posRes.json();
 
                 // 重設即時公車快取
-                busesState = { 'orange12': [], 'yellow2': [], 'orange11': [] };
+                busesState = { 'orange12': [], 'yellow2': [], 'orange11': [], '11': [], '87': [] };
 
                 posData.forEach(bus => {
                     const routeName = bus.RouteName?.Zh_tw;
@@ -654,6 +718,8 @@
                     if (routeName === "橘12") localRouteId = "orange12";
                     else if (routeName === "黃2") localRouteId = "yellow2";
                     else if (routeName === "橘11") localRouteId = "orange11";
+                    else if (routeName === "11") localRouteId = "11";
+                    else if (routeName === "87") localRouteId = "87";
 
                     if (localRouteId) {
                         // 使用下載好的動態站點資訊進行空間相似度比對，計算公車位於第幾站
@@ -673,7 +739,7 @@
                             id: bus.PlateNumb || "BUS",
                             lat: lat,
                             lng: lng,
-                            position: closestStopIdx // 用於捷運化時間軸繪製
+                            position: closestStopIdx // 用於捷運化時間軸與地圖點位渲染
                         });
                     }
                 });
@@ -925,9 +991,9 @@
 
             mapFilterBtns.forEach(btn => {
                 if (btn.dataset.filter === filterValue) {
-                    btn.className = "map-filter-btn flex-1 py-1.5 rounded-full text-xs font-black transition-all text-center bg-brand-dark dark:bg-slate-700 text-white shadow-sm cursor-pointer";
+                    btn.className = "map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center bg-brand-dark dark:bg-slate-700 text-white shadow-sm cursor-pointer";
                 } else {
-                    btn.className = "map-filter-btn flex-1 py-1.5 rounded-full text-xs font-black transition-all text-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer";
+                    btn.className = "map-filter-btn flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-black transition-all text-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer";
                 }
             });
 
@@ -1007,7 +1073,7 @@
             updateMapLayers();
         }
 
-        // --- 核心時間軸渲染 (動態分頁) ---
+        // --- 核心時間軸渲染 (已修正：時間軸公車定位與動態站牌 100% 絕對匹配) ---
         function render() {
             if (currentMainTab !== 'live') return;
 
@@ -1034,8 +1100,9 @@
             busesLayerEl.innerHTML = '';
             
             let hasVisibleStops = false;
-            const activeBuses = busesState[currentRoute];
+            const activeBuses = busesState[currentRoute] || [];
 
+            // 1. 渲染各個站點結構
             stopsToRender.forEach((stopObj, index) => {
                 const stopName = currentLang === 'zh' ? stopObj.zh : stopObj.en;
                 const isMatch = stopName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1102,7 +1169,7 @@
                             etaText = translations[currentLang].etaMinutes.replace('{min}', mins);
                             etaClass = 'text-brand-dark dark:text-slate-200 font-bold';
                         }
-                    } else if (index < Math.max(...busesState[currentRoute].map(b => b.position))) {
+                    } else if (index < Math.max(...activeBuses.map(b => b.position), 0)) {
                         etaText = translations[currentLang].etaDeparted;
                         etaClass = 'text-slate-400 dark:text-slate-500';
                     }
@@ -1112,6 +1179,7 @@
                 const stopDiv = document.createElement('div');
                 stopDiv.className = `flex items-center w-full px-5 relative`;
                 stopDiv.style.height = `${STOP_HEIGHT}px`;
+                stopDiv.setAttribute('data-stop-index', index); // 寫入 Index 標記方便車輛高度計算
                 
                 const isArrivingStatus = etaText === translations[currentLang].etaArriving;
                 const dotColor = isArrivingStatus ? 'border-brand-orange' : 'border-slate-300 dark:border-slate-600';
@@ -1139,18 +1207,25 @@
                 if (verticalLine) verticalLine.classList.remove('hidden');
             }
 
-            // 繪製公車圖示
+            // 2. 渲染公車圖示 (已修正：精確高度定位，防止「爆出」或「錯位」)
             if (!searchQuery) {
                 activeBuses.forEach(bus => {
-                    if (bus.position > stopsToRender.length - 1) return;
-
-                    const busIcon = document.createElement('div');
-                    busIcon.className = `bus-icon absolute left-[31px] w-8 h-8 ${route.lineColor} rounded-full text-white flex items-center justify-center shadow-lg border-2 border-white z-30`;
+                    const busPositionIndex = Math.floor(bus.position);
                     
-                    const offsetTop = 16 + (bus.position * STOP_HEIGHT) + (STOP_HEIGHT / 2) - 16; 
-                    busIcon.style.top = `${offsetTop}px`;
-                    busIcon.innerHTML = `<i class="fa-solid fa-bus text-sm"></i>`;
-                    busesLayerEl.appendChild(busIcon);
+                    // 只有當公車的位置確實在此路線站牌索引內時才渲染
+                    if (busPositionIndex >= 0 && busPositionIndex < stopsToRender.length) {
+                        const busIcon = document.createElement('div');
+                        busIcon.className = `bus-icon absolute left-[31px] w-8 h-8 ${route.lineColor} rounded-full text-white flex items-center justify-center shadow-lg border-2 border-white z-30`;
+                        
+                        // 公車的微小偏移比例
+                        const fraction = bus.position - busPositionIndex;
+                        // 計算完美的相對站牌高度，不受本機與實體站牌數量落差影響
+                        const offsetTop = 16 + (busPositionIndex * STOP_HEIGHT) + (fraction * STOP_HEIGHT) + (STOP_HEIGHT / 2) - 16; 
+                        
+                        busIcon.style.top = `${offsetTop}px`;
+                        busIcon.innerHTML = `<i class="fa-solid fa-bus text-sm"></i>`;
+                        busesLayerEl.appendChild(busIcon);
+                    }
                 });
             }
         }
