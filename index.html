@@ -362,6 +362,7 @@
                 settingsIntervalTitle: 'Auto Update Interval',
                 settingsIntervalDesc: 'Set the interval for background bus position updates',
                 noResult: 'No matching stops found',
+                etaNotDeparted: 'Not departed',
                 textArriving: 'Arriving',
                 eta1Min: 'Approx. 1 Min',
                 etaMinutes: 'Approx. {min} Mins',
@@ -881,85 +882,132 @@
             let gpsStatus = false;
             let shapeStatus = false;
 
-            // 1. 下載各路線的 TDX 真實站牌序列
-            // FIX #3 & FIX #6 & FIX #9: 站牌隔離下載、自動 StopSequence 排序、RouteUID + Direction 快取
+            const currentUid = routeUIDs[currentRoute];
+
+            // 1. 動態下載 *當前* 路線的 TDX 真實站名與座標 (優先阻斷性下載，讓切換瞬間完成)
             try {
-                console.info("[Stop API] 開始下載/檢查真實站牌清單...");
-                const stopPromises = Object.keys(routesData).map(async (routeId) => {
-                    const uid = routeUIDs[routeId];
-                    // 若無此 RouteUID + Direction 快取，則進行請求
-                    if (!tdxStopsCache[uid] || !tdxStopsCache[uid][currentDirection]) {
-                        try {
-                            const stopsRes = await fetchWithTimeout(`${apiBase}/api/bus/StopOfRoute/City/Kaohsiung?$filter=RouteUID eq '${uid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
-                            if (stopsRes.ok) {
-                                const stopsData = await stopsRes.json();
-                                if (stopsData && stopsData.length > 0) {
-                                    // 確保 StopSequence 重新遞增排序，排除亂序 (FIX #6)
-                                    const sortedStops = stopsData[0].Stops.sort((a, b) => a.StopSequence - b.StopSequence);
-                                    
-                                    if (!tdxStopsCache[uid]) {
-                                        tdxStopsCache[uid] = { 0: null, 1: null };
-                                    }
-                                    tdxStopsCache[uid][currentDirection] = sortedStops.map(s => ({
-                                        nameZh: s.StopName.Zh_tw,
-                                        nameEn: s.StopName.En || s.StopName.Zh_tw,
-                                        lat: s.StopPosition.PositionLat,
-                                        lng: s.StopPosition.PositionLon
-                                    }));
-                                    console.info(`[Stop API] 成功更新站牌資料: ${uid}_${currentDirection} (共 ${tdxStopsCache[uid][currentDirection].length} 站)`);
+                console.info(`[Stop API] 開始檢查當前路線 ${currentRoute} (${currentUid}) 站牌...`);
+                if (!tdxStopsCache[currentUid] || !tdxStopsCache[currentUid][currentDirection]) {
+                    try {
+                        const stopsRes = await fetchWithTimeout(`${apiBase}/api/bus/StopOfRoute/City/Kaohsiung?$filter=RouteUID eq '${currentUid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
+                        if (stopsRes.ok) {
+                            const stopsData = await stopsRes.json();
+                            if (stopsData && stopsData.length > 0) {
+                                // 確保 StopSequence 重新遞增排序，排除亂序 (FIX #6)
+                                const sortedStops = stopsData[0].Stops.sort((a, b) => a.StopSequence - b.StopSequence);
+                                
+                                if (!tdxStopsCache[currentUid]) {
+                                    tdxStopsCache[currentUid] = { 0: null, 1: null };
                                 }
+                                tdxStopsCache[currentUid][currentDirection] = sortedStops.map(s => ({
+                                    nameZh: s.StopName.Zh_tw,
+                                    nameEn: s.StopName.En || s.StopName.Zh_tw,
+                                    lat: s.StopPosition.PositionLat,
+                                    lng: s.StopPosition.PositionLon
+                                }));
+                                console.info(`[Stop API] 成功更新當前站牌資料: ${currentUid}_${currentDirection} (共 ${tdxStopsCache[currentUid][currentDirection].length} 站)`);
                             }
-                        } catch (err) {
-                            // FIX #3: 站點 Cache 保護，下載失敗時僅保留舊快取，不作清空，提供穩健容錯
-                            console.warn(`[Stop API] 下載 ${uid} 站牌資料異常，保留前次快取:`, err.message);
                         }
+                    } catch (err) {
+                        // FIX #3: 站點 Cache 保護，下載失敗時僅保留舊快取，不作清空，提供穩健容錯
+                        console.warn(`[Stop API] 下載當前路線 ${currentUid} 站牌資料異常，保留前次快取:`, err.message);
                     }
-                });
-                await Promise.all(stopPromises);
-                stopStatus = true;
+                }
+                // 只要當前路線有站牌資料（不論是快取還是剛下載的），即視為 Stop API 成功
+                if (tdxStopsCache[currentUid] && tdxStopsCache[currentUid][currentDirection]) {
+                    stopStatus = true;
+                }
             } catch (err) {
-                console.error("[Stop API] 站牌清單下載流程發生阻礙:", err.message);
+                console.error("[Stop API] 站牌清單處理流程發生阻礙:", err.message);
             }
 
-            // 2. 下載實體道路 Shape 折線
+            // 2. 下載當前路線的實體道路 Shape 折線
             // FIX #5: 循線繪製重構，完全以 RouteUID + Direction 完全分離快取，避免路網畫錯
             try {
-                console.info("[Shape API] 開始下載/檢查真實 Shape 路網軌跡...");
-                const shapePromises = Object.keys(routesData).map(async (routeId) => {
-                    const uid = routeUIDs[routeId];
-                    if (!tdxShapeCache[uid] || !tdxShapeCache[uid][currentDirection]) {
-                        try {
-                            const shapeRes = await fetchWithTimeout(`${apiBase}/api/bus/Shape/City/Kaohsiung?$filter=RouteUID eq '${uid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
-                            if (shapeRes.ok) {
-                                const shapeData = await shapeRes.json();
-                                if (shapeData && shapeData.length > 0 && shapeData[0].Geometry) {
-                                    const coords = parseWKTLineString(shapeData[0].Geometry);
-                                    if (coords && coords.length > 0) {
-                                        if (!tdxShapeCache[uid]) {
-                                            tdxShapeCache[uid] = { 0: null, 1: null };
-                                        }
-                                        tdxShapeCache[uid][currentDirection] = coords;
-                                        console.info(`[Shape API] 成功下載路網資料: ${uid}_${currentDirection} (共 ${coords.length} 點)`);
+                console.info(`[Shape API] 開始檢查當前路線 ${currentRoute} (${currentUid}) Shape 折線...`);
+                if (!tdxShapeCache[currentUid] || !tdxShapeCache[currentUid][currentDirection]) {
+                    try {
+                        const shapeRes = await fetchWithTimeout(`${apiBase}/api/bus/Shape/City/Kaohsiung?$filter=RouteUID eq '${currentUid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
+                        if (shapeRes.ok) {
+                            const shapeData = await shapeRes.json();
+                            if (shapeData && shapeData.length > 0 && shapeData[0].Geometry) {
+                                const coords = parseWKTLineString(shapeData[0].Geometry);
+                                if (coords && coords.length > 0) {
+                                    if (!tdxShapeCache[currentUid]) {
+                                        tdxShapeCache[currentUid] = { 0: null, 1: null };
+                                    }
+                                    tdxShapeCache[currentUid][currentDirection] = coords;
+                                    console.info(`[Shape API] 成功下載當前路網資料: ${currentUid}_${currentDirection} (共 ${coords.length} 點)`);
 
-                                        // 資料一致性幾何偏差校驗 (新提議驗證機制)
-                                        if (tdxStopsCache[uid] && tdxStopsCache[uid][currentDirection]) {
-                                            validateStopAndShapeConsistency(routeId, currentDirection, tdxStopsCache[uid][currentDirection], coords);
-                                        }
+                                    // 資料一致性幾何偏差校驗
+                                    if (tdxStopsCache[currentUid] && tdxStopsCache[currentUid][currentDirection]) {
+                                        validateStopAndShapeConsistency(currentRoute, currentDirection, tdxStopsCache[currentUid][currentDirection], coords);
                                     }
                                 }
                             }
-                        } catch (err) {
-                            console.warn(`[Shape API] 下載路網 ${uid}_${currentDirection} 異常，將降級採用站點連線軌跡:`, err.message);
                         }
+                    } catch (err) {
+                        console.warn(`[Shape API] 下載當前路網 ${currentUid}_${currentDirection} 異常，將降級採用站點連線軌跡:`, err.message);
                     }
-                });
-                await Promise.all(shapePromises);
-                shapeStatus = true;
+                }
+                if (tdxShapeCache[currentUid] && tdxShapeCache[currentUid][currentDirection]) {
+                    shapeStatus = true;
+                }
             } catch (err) {
                 console.error("[Shape API] 幾何軌跡下載流程發生阻礙:", err.message);
             }
 
-            // 3. 獲取高雄市公車的即時 GPS 位置
+            // 3. 背景非同步預載其他路線的站牌與路網 (非阻塞型，保障切換瞬間完成)
+            Object.keys(routesData).forEach((routeId) => {
+                if (routeId === currentRoute) return; 
+                const uid = routeUIDs[routeId];
+                
+                // 非同步預載站牌
+                if (!tdxStopsCache[uid] || !tdxStopsCache[uid][currentDirection]) {
+                    fetchWithTimeout(`${apiBase}/api/bus/StopOfRoute/City/Kaohsiung?$filter=RouteUID eq '${uid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(stopsData => {
+                            if (stopsData && stopsData.length > 0) {
+                                const sortedStops = stopsData[0].Stops.sort((a, b) => a.StopSequence - b.StopSequence);
+                                if (!tdxStopsCache[uid]) {
+                                    tdxStopsCache[uid] = { 0: null, 1: null };
+                                }
+                                tdxStopsCache[uid][currentDirection] = sortedStops.map(s => ({
+                                    nameZh: s.StopName.Zh_tw,
+                                    nameEn: s.StopName.En || s.StopName.Zh_tw,
+                                    lat: s.StopPosition.PositionLat,
+                                    lng: s.StopPosition.PositionLon
+                                }));
+                                console.info(`[Stop API Background] 背景成功下載並快取路線 ${routeId} 站牌`);
+                                if (currentMainTab === 'map') updateMapLayers();
+                            }
+                        }).catch(() => {});
+                }
+                
+                // 非同步預載路網
+                if (!tdxShapeCache[uid] || !tdxShapeCache[uid][currentDirection]) {
+                    fetchWithTimeout(`${apiBase}/api/bus/Shape/City/Kaohsiung?$filter=RouteUID eq '${uid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(shapeData => {
+                            if (shapeData && shapeData.length > 0 && shapeData[0].Geometry) {
+                                const coords = parseWKTLineString(shapeData[0].Geometry);
+                                if (coords && coords.length > 0) {
+                                    if (!tdxShapeCache[uid]) {
+                                        tdxShapeCache[uid] = { 0: null, 1: null };
+                                    }
+                                    tdxShapeCache[uid][currentDirection] = coords;
+                                    console.info(`[Shape API Background] 背景成功下載並快取路線 ${routeId} Shape 路網`);
+                                    if (currentMainTab === 'map') {
+                                        drawRouteLinesOnMap();
+                                        updateMapLayers();
+                                    }
+                                }
+                            }
+                        }).catch(() => {});
+                }
+            });
+
+            // 4. 獲取高雄市公車的即時 GPS 位置
             // FIX #2 & FIX #3 & FIX #8 & FIX #9: 優先 RealTimeNearStop，回退 ByFrequency，過濾漂移點與 null 容錯
             try {
                 let gpsData = [];
@@ -1008,7 +1056,7 @@
                             const lng = bus.BusPosition?.PositionLon;
                             if (!lat || !lng) return;
 
-                            // FIX #3: 移除全域方向綁架。不直接丟棄不同方向的公車，而是動態識別其方向，使其能並存於地圖中
+                            // FIX #2: GPS Direction 容錯，若 Direction 不存在（null/undefined），視為有效資料
                             const busDir = (bus.Direction === null || bus.Direction === undefined) ? currentDirection : bus.Direction;
 
                             const localRouteId = Object.keys(routeUIDs).find(key => routeUIDs[key] === rUID);
@@ -1058,24 +1106,23 @@
                 console.error("[GPS API] 車輛位置資料更新異常，已套用快取防護:", err.message);
             }
 
-            // 4. 獲取當前所選路線之真實預估到站秒數 (ETA API)
+            // 5. 獲取當前所選路線之真實預估到站秒數 (ETA API)
             // FIX #1 & FIX #3 & FIX #9: ETA 雙向快取 Direction 整合，採用單 API 獨立異常容錯機制
             try {
                 console.info("[ETA API] 正在取得即時預估到站時間 (ETA)...");
-                const currentTdxUID = routeUIDs[currentRoute];
-                const etaRes = await fetchWithTimeout(`${apiBase}/api/bus/EstimatedTimeOfArrival/City/Kaohsiung?$filter=RouteUID eq '${currentTdxUID}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
+                const etaRes = await fetchWithTimeout(`${apiBase}/api/bus/EstimatedTimeOfArrival/City/Kaohsiung?$filter=RouteUID eq '${currentUid}' and Direction eq ${currentDirection}&$format=JSON`, { timeout: 10000 });
                 if (etaRes.ok) {
                     const etaData = await etaRes.json();
                     
                     // 初始化當前路線雙向快取
-                    if (!tdxEtaCache[currentTdxUID]) {
-                        tdxEtaCache[currentTdxUID] = { 0: {}, 1: {} };
+                    if (!tdxEtaCache[currentUid]) {
+                        tdxEtaCache[currentUid] = { 0: {}, 1: {} };
                     }
-                    tdxEtaCache[currentTdxUID][currentDirection] = {};
+                    tdxEtaCache[currentUid][currentDirection] = {};
 
                     etaData.forEach(item => {
                         if (item.StopName?.Zh_tw) {
-                            tdxEtaCache[currentTdxUID][currentDirection][item.StopName.Zh_tw] = {
+                            tdxEtaCache[currentUid][currentDirection][item.StopName.Zh_tw] = {
                                 estimate: item.EstimateTime, // 單位：秒
                                 status: item.StopStatus      // 狀態
                             };
