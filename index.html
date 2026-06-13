@@ -362,7 +362,6 @@
                 settingsIntervalTitle: 'Auto Update Interval',
                 settingsIntervalDesc: 'Set the interval for background bus position updates',
                 noResult: 'No matching stops found',
-                etaNotDeparted: 'Not departed',
                 textArriving: 'Arriving',
                 eta1Min: 'Approx. 1 Min',
                 etaMinutes: 'Approx. {min} Mins',
@@ -670,8 +669,8 @@
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 showBackendStatus(`連線中... 嘗試喚醒雲端代理服務 (第 ${attempt}/${maxRetries} 次)...`, "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 animate-pulse");
                 try {
-                    // 呼叫後端 Token 連線狀態 API (加入 10 秒限時)
-                    const response = await fetchWithTimeout(`${url}/api/token-status`, { timeout: 10000 });
+                    // FIX #2: 給予冷啟動足夠的喚醒超時時間（45秒），防止 AbortController 提早掐斷連線
+                    const response = await fetchWithTimeout(`${url}/api/token-status`, { timeout: 45000 });
                     if (response.ok) {
                         const data = await response.json();
                         if (data.status === 'success') {
@@ -712,7 +711,7 @@
             }
 
             if (!connected) {
-                showBackendStatus("未偵測到運作中的伺服器。已自動降級為本地模擬資料（橘12為精準25站模擬）。", "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 text-left");
+                showBackendStatus("未偵測到運作中的伺服器。已自動降級為本地模擬資料（橘12為精準 25 站模擬）。", "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 text-left");
                 isUsingNodeServer = false;
                 updateDataSourceUI(false);
                 loadMockInitialBuses();
@@ -1009,10 +1008,8 @@
                             const lng = bus.BusPosition?.PositionLon;
                             if (!lat || !lng) return;
 
-                            // FIX #2: GPS Direction 容錯，若 Direction 不存在（null/undefined），視為有效資料
-                            if (bus.Direction !== null && bus.Direction !== undefined && bus.Direction !== currentDirection) {
-                                return;
-                            }
+                            // FIX #3: 移除全域方向綁架。不直接丟棄不同方向的公車，而是動態識別其方向，使其能並存於地圖中
+                            const busDir = (bus.Direction === null || bus.Direction === undefined) ? currentDirection : bus.Direction;
 
                             const localRouteId = Object.keys(routeUIDs).find(key => routeUIDs[key] === rUID);
                             if (localRouteId) {
@@ -1020,8 +1017,8 @@
                                 
                                 // FIX #8: 漂移跳點檢測過濾 (點線距離計算)
                                 // 提取當前活動的最佳路網座標
-                                const activeShapeCoords = tdxShapeCache[rUID][currentDirection] || 
-                                                          (tdxStopsCache[rUID][currentDirection] ? tdxStopsCache[rUID][currentDirection].map(s => [s.lat, s.lng]) : null) || 
+                                const activeShapeCoords = tdxShapeCache[rUID][busDir] || 
+                                                          (tdxStopsCache[rUID][busDir] ? tdxStopsCache[rUID][busDir].map(s => [s.lat, s.lng]) : null) || 
                                                           route.coords;
 
                                 const distToRoute = getMinDistanceToPolyline(lat, lng, activeShapeCoords);
@@ -1030,7 +1027,7 @@
                                     return;
                                 }
 
-                                const stopsList = tdxStopsCache[rUID][currentDirection] || [];
+                                const stopsList = tdxStopsCache[rUID][busDir] || [];
                                 let minDistance = Infinity;
                                 let closestStopIdx = 0;
 
@@ -1046,6 +1043,7 @@
                                     id: bus.PlateNumb || "BUS",
                                     lat: lat,
                                     lng: lng,
+                                    direction: busDir, // 記錄公車自身的方向 (去程或返程)
                                     position: closestStopIdx // 用於捷運化時間軸與地圖點位渲染
                                 });
                             }
@@ -1100,6 +1098,8 @@
                 console.warn("[API Manager] 所有即時連線 API 均告超時或失敗，系統切換回離線模擬降級。");
                 isUsingNodeServer = false;
                 updateBannerGrading(false, false, false, false);
+                // FIX #1: 重新注入模擬數據以啟動模擬公車，避免幽靈無車狀態
+                loadMockInitialBuses();
             }
 
             // 重繪 Leaflet 地圖循線
@@ -1215,6 +1215,9 @@
         function updateMapLayers() {
             if (!map) return;
 
+            // FIX #1 Leaflet Polyline Cache - 確保每次重繪點位前，最新快取之 RouteUID + Direction 路網折線已被同步更新
+            drawRouteLinesOnMap();
+
             const activeRoutes = (currentMapFilter === 'all') 
                 ? Object.keys(routesData) 
                 : [currentMapFilter];
@@ -1313,7 +1316,7 @@
                 }
             });
 
-            // B. 更新公車動態標記 (精準更新坐標，不重建 Layer，防止地圖車輛重绘閃爍)
+            // B. 更新公車動態標記 (精準更新坐標，不重建 Layer，防止地圖車輛重繪閃爍)
             let currentActiveBusKeys = new Set();
 
             activeRoutes.forEach(routeId => {
@@ -1486,7 +1489,8 @@
             busesLayerEl.innerHTML = '';
             
             let hasVisibleStops = false;
-            const activeBuses = busesState[currentRoute] || [];
+            // FIX #3: 時間軸僅過濾並渲染與當前使用者選擇方向 (currentDirection) 一致的公車
+            const activeBuses = (busesState[currentRoute] || []).filter(bus => bus.direction === undefined || bus.direction === currentDirection);
 
             // 1. 渲染各個站點結構
             stopsToRender.forEach((stopObj, index) => {
@@ -1651,11 +1655,13 @@
                 render();
             }
 
+            // 🚀 重大優化：切換回地圖頁面時立即呼叫 updateMapLayers() 重繪 (內部會一併調用 drawRouteLinesOnMap 刷新循線)
             if (tabId === 'map') {
                 setTimeout(() => {
                     initLeafletMap();
                     if (map) {
                         map.invalidateSize(); 
+                        updateMapLayers(); // 確保使用者切換回地圖時，地圖上的座標與去返程、路線狀態 100% 同步！
                     }
                 }, 50);
             }
